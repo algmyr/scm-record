@@ -89,6 +89,15 @@ impl Rect {
         }
     }
 
+    pub fn row(self, row: isize) -> Rect {
+        Rect {
+            x: self.x,
+            y: self.y + row,
+            width: self.width,
+            height: 1,
+        }
+    }
+
     /// The (x, y) coordinate of the top-left corner of this `Rect`.
     fn top_left(self) -> (isize, isize) {
         (self.x, self.y)

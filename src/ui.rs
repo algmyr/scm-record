@@ -431,6 +431,7 @@ pub struct Recorder<'state, 'input> {
     focused_commit_idx: usize,
     quit_dialog: Option<QuitDialog>,
     scroll_offset_y: isize,
+    title: Option<String>,
 }
 
 impl<'state, 'input> Recorder<'state, 'input> {
@@ -456,9 +457,16 @@ impl<'state, 'input> Recorder<'state, 'input> {
             focused_commit_idx: 0,
             quit_dialog: None,
             scroll_offset_y: 0,
+            title: None,
         };
         recorder.expand_initial_items();
         recorder
+    }
+
+    /// Set title of the Recorder.
+    pub fn with_title(mut self, title: &str) -> Self {
+        self.title = Some(title.to_owned());
+        self
     }
 
     /// Run the terminal user interface and have the user interactively select
@@ -828,6 +836,7 @@ impl<'state, 'input> Recorder<'state, 'input> {
         };
         AppView {
             debug_info: None,
+            title_line: self.title.clone().map(|title| TitleLine { title: title.into() }),
             menu_bar,
             commit_view_mode: self.commit_view_mode,
             commit_views,
@@ -1494,12 +1503,12 @@ impl<'state, 'input> Recorder<'state, 'input> {
         drawn_rects: &DrawnRects<ComponentId>,
         selection_key: SelectionKey,
     ) -> Option<isize> {
-        let menu_bar_height = 1;
+        let header_height = if self.title.is_some() { 2 } else { 1 };
         let sticky_file_header_height = match selection_key {
             SelectionKey::None | SelectionKey::File(_) => 0,
             SelectionKey::Section(_) | SelectionKey::Line(_) => 1,
         };
-        let top_margin = sticky_file_header_height + menu_bar_height;
+        let top_margin = sticky_file_header_height + header_height;
 
         let viewport_top_y = self.scroll_offset_y + top_margin;
         let viewport_height = term_height.unwrap_isize() - top_margin;
@@ -2131,6 +2140,7 @@ struct AppDebugInfo {
 struct AppView<'a> {
     debug_info: Option<AppDebugInfo>,
     menu_bar: MenuBar<'a>,
+    title_line: Option<TitleLine<'a>>,
     commit_view_mode: CommitViewMode,
     commit_views: Vec<CommitView<'a>>,
     quit_dialog: Option<QuitDialog>,
@@ -2147,6 +2157,7 @@ impl Component for AppView<'_> {
         let Self {
             debug_info,
             menu_bar,
+            title_line,
             commit_view_mode,
             commit_views,
             quit_dialog,
@@ -2158,7 +2169,7 @@ impl Component for AppView<'_> {
 
         let viewport_rect = viewport.mask_rect();
 
-        let menu_bar_height = 1usize;
+        let header_height = if title_line.is_some() { 2 } else { 1 };
         let commit_view_width = match commit_view_mode {
             CommitViewMode::Inline => viewport.rect().width,
             CommitViewMode::Adjacent => {
@@ -2169,7 +2180,7 @@ impl Component for AppView<'_> {
         };
         let commit_views_mask = Mask {
             x: viewport_rect.x,
-            y: viewport_rect.y + menu_bar_height.unwrap_isize(),
+            y: viewport_rect.y + header_height.unwrap_isize(),
             width: Some(viewport_rect.width),
             height: None,
         };
@@ -2185,7 +2196,7 @@ impl Component for AppView<'_> {
                 let commit_view_rect = viewport.with_mask(commit_view_mask, |viewport| {
                     viewport.draw_component(
                         commit_view_x,
-                        menu_bar_height.unwrap_isize(),
+                        header_height.unwrap_isize(),
                         commit_view,
                     )
                 });
@@ -2196,10 +2207,35 @@ impl Component for AppView<'_> {
         });
 
         viewport.draw_component(x, viewport_rect.y, menu_bar);
+        if let Some(c) = title_line {
+            viewport.draw_component(x, viewport_rect.y + 1, c);
+        }
 
         if let Some(quit_dialog) = quit_dialog {
             viewport.draw_component(0, 0, quit_dialog);
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct TitleLine<'a> {
+    title: Cow<'a, str>,
+}
+
+impl Component for TitleLine<'_> {
+    type Id = ComponentId;
+
+    fn id(&self) -> Self::Id {
+        ComponentId::App
+    }
+
+    fn draw(&self, viewport: &mut Viewport<Self::Id>, x: isize, y: isize) {
+        // TODO: This is ugly, surely there's a better way to do this?
+        let r = viewport.rect().row(y);
+        highlight_rect(viewport, r);
+        let style = Style::default();
+        let span = Span::styled(self.title.clone(), style);
+        viewport.draw_span(x, y, &span);
     }
 }
 

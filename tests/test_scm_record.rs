@@ -2589,6 +2589,75 @@ fn test_max_file_view_width() -> eyre::Result<()> {
 }
 
 #[test]
+fn test_title_with_view_widths() -> eyre::Result<()> {
+    let state = RecordState {
+        is_read_only: false,
+        commits: Default::default(),
+        files: vec![File {
+            old_path: None,
+            path: Cow::Owned("a/file/path".into()),
+            file_mode: None,
+            sections: vec![
+                Section::Unchanged {
+                    lines: vec![Cow::Owned("unchanged line".into())],
+                },
+                Section::Changed {
+                    lines: vec![SectionChangedLine {
+                        is_checked: false,
+                        change_type: ChangeType::Added,
+                        line: Cow::Owned("changed line".into()),
+                    }],
+                },
+            ],
+        }],
+    };
+    let initial_wide = TestingScreenshot::default();
+    let mut input = TestingInput::new(
+        80,
+        7,
+        [
+            Event::ExpandAll,
+            Event::ToggleCommitViewMode,
+            initial_wide.event(),
+            Event::QuitAccept,
+        ],
+    );
+    let recorder = Recorder::new(state.clone(), &mut input).with_title("A fairly long title, but not long enough to be an issue.");
+    recorder.run()?;
+
+    insta::assert_snapshot!(initial_wide, @r###"
+    "[File] [Edit] [Select] [View]                                                   "
+    "A fairly long title, but not long enough to be an issue.                        "
+    "( ) a/file/path                     (-) [ ] a/file/path                     [+] "
+    "        1 unchanged line                                                        "
+    "  [ ] Section 1/1                   [-]                                         "
+    "    [ ] + changed line                                                          "
+    "                                                                                "
+    "###);
+
+    let initial_narrow = TestingScreenshot::default();
+    let mut input = TestingInput::new(
+        15,
+        7,
+        [Event::ExpandAll, initial_narrow.event(), Event::QuitAccept],
+    );
+    let recorder = Recorder::new(state, &mut input).with_title("How dare you cut me off!?");
+    recorder.run()?;
+
+    insta::assert_snapshot!(initial_narrow, @r###"
+    "[File] [Edit] ["
+    "How dare you cu"
+    "( ) a/file/…(-)"
+    "        1 unch…"
+    "  [ ] Secti…[-]"
+    "    [ ] + chan…"
+    "               "
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn test_commit_message_view() -> eyre::Result<()> {
     let mut state = example_contents();
     state.commits = vec![Commit {

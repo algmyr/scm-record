@@ -930,6 +930,10 @@ pub struct Opts {
     /// Write the resolved merge conflicts to this file.
     #[clap(short = 'o', long = "output", conflicts_with("dir_diff"))]
     output: Option<PathBuf>,
+
+    /// Title to display before the editor.
+    #[clap(long = "title")]
+    title: Option<String>,
 }
 
 fn process_opts(filesystem: &dyn Filesystem, opts: &Opts) -> Result<(Vec<File<'static>>, PathBuf)> {
@@ -942,6 +946,7 @@ fn process_opts(filesystem: &dyn Filesystem, opts: &Opts) -> Result<(Vec<File<'s
             output: _,
             read_only: _,
             dry_run: _,
+            title: _,
         } => {
             let files = vec![render::create_file(
                 filesystem,
@@ -961,6 +966,7 @@ fn process_opts(filesystem: &dyn Filesystem, opts: &Opts) -> Result<(Vec<File<'s
             output: _,
             read_only: _,
             dry_run: _,
+            title: _,
         } => {
             let display_paths = filesystem.read_dir_diff_paths(left, right)?;
             let mut files = Vec::new();
@@ -984,6 +990,7 @@ fn process_opts(filesystem: &dyn Filesystem, opts: &Opts) -> Result<(Vec<File<'s
             output: Some(output),
             read_only: _,
             dry_run: _,
+            title: _,
         } => {
             let files = vec![render::create_merge_file(
                 filesystem,
@@ -1003,6 +1010,7 @@ fn process_opts(filesystem: &dyn Filesystem, opts: &Opts) -> Result<(Vec<File<'s
             output: None,
             read_only: _,
             dry_run: _,
+            title: _,
         } => {
             unreachable!("--output is required when --base is provided");
         }
@@ -1015,6 +1023,7 @@ fn process_opts(filesystem: &dyn Filesystem, opts: &Opts) -> Result<(Vec<File<'s
             output: _,
             read_only: _,
             dry_run: _,
+            title: _,
         } => {
             unimplemented!("--base cannot be used with --dir-diff");
         }
@@ -1033,7 +1042,11 @@ pub fn scm_diff_editor_main(opts: Opts) -> Result<()> {
         files,
     };
     let mut input = CrosstermInput;
-    let recorder = Recorder::new(state, &mut input);
+    let mut recorder = Recorder::new(state, &mut input);
+    if let Some(title) = opts.title {
+        recorder = recorder.with_title(&title);
+    }
+
     match recorder.run() {
         Ok(state) => {
             if opts.dry_run {
